@@ -1,7 +1,8 @@
 
 --[[
+for application on Question Answering
 
-This file trains a character-level multi-layer RNN on text data
+This file trains a word-level multi-layer RNN on text data
 
 Code is based on implementation in 
 https://github.com/oxford-cs-ml-2015/practical6
@@ -29,7 +30,7 @@ local RNN = require 'model.RNN'
 
 cmd = torch.CmdLine()
 cmd:text()
-cmd:text('Train a character-level language model')
+cmd:text('Train a word-level Question Answering model')
 cmd:text()
 cmd:text('Options')
 -- data
@@ -111,10 +112,10 @@ end
 -- create the data loader class
 local loader = WordSplitLMMinibatchLoader.create(opt.data_dir, opt.batch_size, opt.seq_length, split_sizes)
 
-local vocab_size_Q = loader.vocab_size_Q  -- the number of distinct characters
+local vocab_size_Q = loader.vocab_size_Q  -- the number of distinct words
 local vocab_Q = loader.vocab_mapping_Q
 print('question vocab size: ' .. vocab_size_Q)
-local vocab_size_A = loader.vocab_size_A  -- the number of distinct characters
+local vocab_size_A = loader.vocab_size_A  -- the number of distinct words
 local vocab_A = loader.vocab_mapping_A
 print('answer vocab size: ' .. vocab_size_A)
 -- make sure output directory exists
@@ -138,7 +139,7 @@ if string.len(opt.init_from) > 0 then
             vocab_compatible = false
         end
     end
-    assert(vocab_compatible, 'error, the character vocabulary for this dataset and the one in the saved checkpoint are not the same. This is trouble.')
+    assert(vocab_compatible, 'error, the word vocabulary for this dataset and the one in the saved checkpoint are not the same. This is trouble.')
     -- overwrite model settings based on checkpoint to ensure compatibility
     print('overwriting rnn_size=' .. checkpoint.opt.rnn_size .. ', num_layers=' .. checkpoint.opt.num_layers .. ' based on the checkpoint.')
     opt.rnn_size = checkpoint.opt.rnn_size
