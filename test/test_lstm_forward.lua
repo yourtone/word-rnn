@@ -24,8 +24,8 @@ for L = 1,num_layers do
 end
 -- inputs for module.LSTM
 local x = nn.LookupTable(vocab_size, wordveclen)(inputs[1])
-x = nn.SplitTable(2)(x)
-x = nn.JoinTable(1)(x)
+--x = nn.SplitTable(2)(x)
+--x = nn.JoinTable(1)(x)
 local inputs_origin = {}
 table.insert(inputs_origin, x) -- x
 for L = 2,#inputs do
@@ -54,12 +54,14 @@ local rnnmodule = nn.gModule(inputs, outputs_new)
 local rnnmodel = modelLSTM.lstm(vocab_size, wordveclen, output_size, rnn_size, num_layers, dropout)
 
 print('Start test ...')
-local ins1 = {torch.Tensor{3}, torch.rand(rnn_size), torch.rand(rnn_size), torch.rand(rnn_size), torch.rand(rnn_size)}
+local ins1 = {torch.Tensor{3}, torch.rand(1, rnn_size), torch.rand(1, rnn_size), 
+              torch.rand(1, rnn_size), torch.rand(1, rnn_size)}
 local outs1 = rnnmodel:forward(ins1)
 print('Output model:')
 
 print(outs1)
-local ins2 = {torch.Tensor{3}, torch.rand(rnn_size), torch.rand(rnn_size), torch.rand(rnn_size), torch.rand(rnn_size)}
+local ins2 = {torch.Tensor{3}, torch.rand(1, rnn_size), torch.rand(1, rnn_size), 
+              torch.rand(1, rnn_size), torch.rand(1, rnn_size)}
 local outs2 = rnnmodule:forward(ins2)
 print('Output module:')
 print(outs2)
