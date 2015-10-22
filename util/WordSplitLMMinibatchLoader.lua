@@ -6,10 +6,12 @@
 local WordSplitLMMinibatchLoader = {}
 WordSplitLMMinibatchLoader.__index = WordSplitLMMinibatchLoader
 
-function WordSplitLMMinibatchLoader.create(data_dir, batch_size, seq_length, split_fractions)
+function WordSplitLMMinibatchLoader.create(data_dir, batch_size, seq_length, split_fractions, in_wordvecfile, in_wordveclen)
+    WordSplitLMMinibatchLoader.wordvecfile = in_wordvecfile
+    WordSplitLMMinibatchLoader.wordveclen = in_wordveclen
     -- split_fractions is e.g. {0.9, 0.05, 0.05}
-
     local self = {}
+
     setmetatable(self, WordSplitLMMinibatchLoader)
 
     local input_file_tr_Q = path.join(data_dir, 'train', 'questions.txt')
@@ -146,6 +148,11 @@ function WordSplitLMMinibatchLoader:reset_batch_pointer(split_index, batch_index
 end
 
 function WordSplitLMMinibatchLoader:next_batch(split_index)
+    if WordSplitLMMinibatchLoader.wordvec == nil then
+        WordSplitLMMinibatchLoader.wordvec = torch.load(WordSplitLMMinibatchLoader.wordvecfile)
+    end
+    assert(not (WordSplitLMMinibatchLoader.wordvec == nil), 'WordSplitLMMinibatchLoader.wordvec should not be nil')
+
     if self.split_sizes[split_index] == 0 then
         -- perform a check here to make sure the user isn't screwing something up
         local split_names = {'train', 'val', 'test'}
@@ -161,11 +168,25 @@ function WordSplitLMMinibatchLoader:next_batch(split_index)
     local ix = self.batch_ix[split_index]
     if split_index == 2 then ix = ix + self.ntrain end -- offset by train set size
     if split_index == 3 then ix = ix + self.ntrain + self.nval end -- offset by train + val
-    return self.x_batches[ix], self.y_batches[ix]
+
+    -- return wordvec's
+    local tmp_x_batches = self.x_batches[ix]:float()
+    local tmp_wordvec_batches = torch.Tensor(self.batch_size, self.seq_length, self.wordveclen)
+    for i=1,self.batch_size do
+        for j=1,self.seq_length do
+            tmp_wordvec_batches[{i,j,{}}] = self.wordvec.index_to_emb[tmp_x_batches[i][j]]
+        end
+    end
+    return tmp_wordvec_batches, self.y_batches[ix]
 end
 
 -- *** STATIC method ***
 function WordSplitLMMinibatchLoader.text_to_tensor(in_textfolder, out_datafile)
+    if WordSplitLMMinibatchLoader.wordvec == nil then
+        WordSplitLMMinibatchLoader.wordvec = torch.load(WordSplitLMMinibatchLoader.wordvecfile)
+    end
+    assert(not (WordSplitLMMinibatchLoader.wordvec == nil), 'WordSplitLMMinibatchLoader.wordvec should not be nil')
+
     local timer = torch.Timer()
     local in_file_tr_Q = path.join(in_textfolder, 'train', 'questions.txt')
     local in_file_tr_A = path.join(in_textfolder, 'train', 'answers.txt')
@@ -250,7 +271,13 @@ function WordSplitLMMinibatchLoader.text_to_tensor(in_textfolder, out_datafile)
     -- invert `ordered` to create the word->int mapping
     local vocab_mapping_Q = {}
     for i, word in ipairs(ordered) do
-        vocab_mapping_Q[word] = i
+        --vocab_mapping_Q[word] = i -- not use the sorted index
+        local tmpIdx = WordSplitLMMinibatchLoader.wordvec.word_to_index[word]
+        if tmpIdx == nil then
+            vocab_mapping_Q[word] = WordSplitLMMinibatchLoader.wordvec.word_to_index['*unk*']
+        else
+            vocab_mapping_Q[word] = tmpIdx
+        end
     end
     ordered = {}
     for word in pairs(unordered_A) do ordered[#ordered + 1] = word end

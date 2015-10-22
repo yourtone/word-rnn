@@ -20,11 +20,10 @@ require 'nngraph'
 require 'optim'
 require 'lfs'
 
-require 'util.OneHot'
 require 'util.misc'
 local WordSplitLMMinibatchLoader = require 'util.WordSplitLMMinibatchLoader'
 local model_utils = require 'util.model_utils'
-local LSTM = require 'model.LSTM'
+local word_LSTM = require 'model.word_LSTM'
 local GRU = require 'model.GRU'
 local RNN = require 'model.RNN'
 
@@ -64,6 +63,8 @@ cmd:option('-gpuid',0,'which gpu to use. -1 = use CPU')
 cmd:option('-opencl',0,'use OpenCL (instead of CUDA)')
 -- my modification
 cmd:option('-wordveclen',200,'word vector length')
+cmd:option('-wordvecdir','word_embedding','word vector directory')
+cmd:option('-wordvecprefix','CBOW','word vector filename prefix')
 cmd:text()
 
 -- parse input params
@@ -110,7 +111,8 @@ if opt.gpuid >= 0 and opt.opencl == 1 then
 end
 
 -- create the data loader class
-local loader = WordSplitLMMinibatchLoader.create(opt.data_dir, opt.batch_size, opt.seq_length, split_sizes)
+local wordvecfile = opt.wordvecdir .. '/' .. opt.wordvecprefix .. '_' .. opt.wordveclen .. '.t7'
+local loader = WordSplitLMMinibatchLoader.create(opt.data_dir, opt.batch_size, opt.seq_length, split_sizes, wordvecfile, opt.wordveclen)
 
 local vocab_size_Q = loader.vocab_size_Q  -- the number of distinct words
 local vocab_Q = loader.vocab_mapping_Q
@@ -149,7 +151,8 @@ else
     print('creating an ' .. opt.model .. ' with ' .. opt.num_layers .. ' layers')
     protos = {}
     if opt.model == 'lstm' then
-        protos.rnn = LSTM.lstm(vocab_size_Q, opt.wordveclen, vocab_size_A, opt.rnn_size, opt.num_layers, opt.dropout)
+        --protos.rnn = LSTM.lstm(vocab_size_Q, opt.wordveclen, vocab_size_A, opt.rnn_size, opt.num_layers, opt.dropout)
+        protos.rnn = word_LSTM.create(opt.wordveclen, vocab_size_A, opt.rnn_size, opt.num_layers, opt.dropout)
     elseif opt.model == 'gru' then
         protos.rnn = GRU.gru(vocab_size_Q, opt.wordveclen, vocab_size_A, opt.rnn_size, opt.num_layers, opt.dropout)
     elseif opt.model == 'rnn' then
@@ -232,7 +235,7 @@ function eval_split(split_index, max_batches)
         -- forward pass
         for t=1,opt.seq_length do
             clones.rnn[t]:evaluate() -- for dropout proper functioning
-            local lst = clones.rnn[t]:forward{x[{{}, t}], unpack(rnn_state[t-1])}
+            local lst = clones.rnn[t]:forward{x[{{}, t, {}}], unpack(rnn_state[t-1])} -- modified
             rnn_state[t] = {}
             for i=1,#init_state do table.insert(rnn_state[t], lst[i]) end
             prediction = lst[#lst] 
@@ -278,7 +281,7 @@ function feval(x)
     local loss = 0
     for t=1,opt.seq_length do
         clones.rnn[t]:training() -- make sure we are in correct mode (this is cheap, sets flag)
-        local lst = clones.rnn[t]:forward{x[{{}, t}], unpack(rnn_state[t-1])}
+        local lst = clones.rnn[t]:forward{x[{{}, t, {}}], unpack(rnn_state[t-1])} -- modified
         rnn_state[t] = {}
         for i=1,#init_state do table.insert(rnn_state[t], lst[i]) end -- extract the state, without output
         predictions[t] = lst[#lst] -- last element is the prediction
@@ -292,7 +295,7 @@ function feval(x)
         -- backprop through loss, and softmax/linear
         local doutput_t = clones.criterion[t]:backward(predictions[t], y[{{}, t}])
         table.insert(drnn_state[t], doutput_t)
-        local dlst = clones.rnn[t]:backward({x[{{}, t}], unpack(rnn_state[t-1])}, drnn_state[t])
+        local dlst = clones.rnn[t]:backward({x[{{}, t, {}}], unpack(rnn_state[t-1])}, drnn_state[t])
         drnn_state[t-1] = {}
         for k,v in pairs(dlst) do
             if k > 1 then -- k == 1 is gradient on x, which we dont need

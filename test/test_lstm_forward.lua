@@ -24,8 +24,6 @@ for L = 1,num_layers do
 end
 -- inputs for module.LSTM
 local x = nn.LookupTable(vocab_size, wordveclen)(inputs[1])
---x = nn.SplitTable(2)(x)
---x = nn.JoinTable(1)(x)
 local inputs_origin = {}
 table.insert(inputs_origin, x) -- x
 for L = 2,#inputs do
